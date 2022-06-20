@@ -87,6 +87,12 @@ summary_by_segment <-
 # --- メールが配信されると売上が発生しやすくなる
 summary_by_segment %>% print()
 
+# RCTの効果測定
+# --- 0.7698272
+t1 <- summary_by_segment %>% filter(treatment == 1) %>% pull(spend_mean)
+t0 <- summary_by_segment %>% filter(treatment == 0) %>% pull(spend_mean)
+t1 - t0
+
 
 # 3 有意差検定 -------------------------------------------------------------
 
