@@ -186,4 +186,4 @@ rct_ttest_biased <- t.test(mens_mail_biased, no_mail_biased, var.equal = T)
 
 # 確認
 # --- p値がさらに小さくなっている（セレクションバイアスの影響）
-rct_ttest_biased %>% print()1
+rct_ttest_biased %>% print()
