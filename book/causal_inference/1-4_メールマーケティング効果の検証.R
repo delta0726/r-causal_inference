@@ -1,13 +1,15 @@
 #***************************************************************************************
 # Title     : 効果検証入門
 # Chapter   : 1章 セレクションバイアスとRCT
-# Date      : 2020/8/13
-# Page      : P1 - P38
+# Theme     : 1-4 メールマーケティング効果の検証
+# Date      : 2022/06/21
+# Page      : P24 - P33
 # URL       : https://github.com/ghmagazine/cibook
 #***************************************************************************************
 
+
 # ＜概要＞
-# - RCT(Randomized Controlled Trail)とは、あらゆる正y句を取り払った際に実行できる検証方法
+# - RCT(Randomized Controlled Trail)とは、あらゆる介入を無作為化した際に実行できる検証方法
 #   --- 現実の世界ではRCTは実施することはできない（タイムマシンが必要）
 #   --- そこで、RCTの結果が再現できるような検証方法を構築することを目指す
 
@@ -18,15 +20,17 @@
 # 2 RCTデータ集計
 # 3 有意差検定
 # 4 バイアスありのデータ作成
+# 5 バイアスありデータの集計
+# 6 バイアスありデータのt検定
 
 
 # 0 準備 ------------------------------------------------------------------
 
+# ライブラリ
 library(tidyverse)
 
 
 # データロード
-# --- ECサイトのユーザーに対してRCTを適用したメールマーケティングを行ったデータ
 email_data <- read_csv("csv/E-MailAnalytics.csv")
 
 # データ概要
@@ -36,10 +40,15 @@ email_data %>% glimpse()
 
 # 1 データ準備 -------------------------------------------------------------
 
-# マーケティング選択肢(介入)の確認
-# --- ｢男性向けメール｣｢女性向けメール｣｢メール配信なし｣の3パターンがある
-email_data$segment %>% unique()
-email_data %>% count(segment)
+# ＜ポイント＞
+# - ECサイトのユーザーに対してRCTを適用したメールマーケティングを行ったデータを使用
+#   --- 男性向けメールと女性向けメールの2種類がある（メールを送らないという選択肢もあるので3パターン）
+#   --- 簡略化のため女性向けのメール配信データは削除
+
+
+# 介入方法の確認
+# --- マーケティング選択肢の確認
+email_data$segment %>% table()
 
 # データ準備
 # --- ｢男性向けメール｣と｢メール配信なし｣に限定したデータを作る
@@ -50,16 +59,15 @@ male_df <-
     mutate(treatment = ifelse(segment == "Mens E-Mail", 1, 0))
 
 # 確認
-male_df %>% as_tibble()
-male_df %>% glimpse()
-male_df %>% count(treatment)
+male_df$treatment %>% table()
 
 
 # 2 RCTデータ集計 -------------------------------------------------------------
 
-# ＜ポイント ＞
+# ＜ポイント＞
 # - 男性でメールを送った人はconversion(購入者割合)もspend(購入金額)も大きいように見える
-#   ---- 差が有意なものかを検定
+#   --- 統計的検定の前に介入有無で集計
+#   --- 次のステップで統計的検定により確認
 
 
 # 集計による比較
@@ -71,7 +79,8 @@ summary_by_segment <-
     group_by(treatment) %>%
     summarise(conversion_rate = mean(conversion),
               spend_mean = mean(spend),
-              count = n())
+              count = n()) %>%
+    ungroup()
 
 # 確認
 # --- メールを配信しているグループのほうがconversionが0.677%高い（1.25%-0.573%）
@@ -84,17 +93,17 @@ summary_by_segment %>% print()
 # ＜ポイント＞
 # - 集計しているデータはRCTによって得られたデータ（セレクションバイアスの問題はない）
 # - 有意差検定を行って帰無仮説が棄却されたら偶然の範囲の誤差かを判定
-#   --- 差の検定で有意性が確認
+#   --- t値が5.3でp値が0（差がゼロであるという可能性を否定）
+#   --- RCTで統計的に統計的に有意な差があることを確認
 
 
 # 有意差検定(t検定)
 # --- treatmentが1/0のspendをベクトルで取得
 # --- 上記の平均差に対して検定を行う
-# --- ｢var.equal = T｣は等分散性を仮定している
+# --- var.equal引数をTRUEとすることで等分散性を仮定している
 mens_mail <- male_df %>% filter(treatment == 1) %>% pull(spend)
 no_mail   <- male_df %>% filter(treatment == 0) %>% pull(spend)
-rct_ttest <- t.test(mens_mail, no_mail, var.equal = T)
-
+rct_ttest <- t.test(mens_mail, no_mail, var.equal = TRUE)
 
 # 確認
 # --- ｢mean of x｣｢mean of y ｣は前述の集計結果と同じ
@@ -102,17 +111,15 @@ rct_ttest <- t.test(mens_mail, no_mail, var.equal = T)
 rct_ttest %>% print()
 
 
-
 # 4 バイアスありのデータ作成 -------------------------------------------------------------
 
 # ＜仮定＞
-# - RCTデータから男性のうち購買傾向が一定以上であるユーザーを抽出してメール配信（セレクションバイアス）
-#   ---
+# - RCTデータから男性のうち購買傾向が一定以上であるユーザーを抽出してメール配信する
+#   --- セレクションバイアスを発生させる
 
 
-# seedを固定する
+# シード固定
 set.seed(1)
-
 
 # 閾値の設定
 # --- 条件に反応するサンプルの量を半分にする
@@ -140,6 +147,13 @@ biased_data %>% select(history, recency, channel, obs_rate_c, obs_rate_t, random
 biased_data %>% glimpse()
 
 
+# 5 バイアスありデータの集計 ---------------------------------------------------------
+
+# ＜ポイント＞
+# - RCTデータの場合と同様に集計を行う
+#   --- 集計値の差が大きくなっていることを確認
+
+
 # 集計による比較
 # --- conversion: メールが配信されて2週間以内に購入したか
 # --- spend: 実際に購入した金額
@@ -148,16 +162,18 @@ summary_by_segment_biased <-
     group_by(treatment) %>%
     summarise(conversion_rate = mean(conversion),
               spend_mean = mean(spend),
-              count = n())
+              count = n()) %>%
+    ungroup()
 
 
 # 確認
 # --- treatmentごとの差が大きくなっている（conversion_rateで確認）
 # --- セレクションバイアスが発生した可能性を示唆
 summary_by_segment_biased %>% print()
+summary_by_segment %>% print()
 
 
-# 3 t検定 -------------------------------------------------------------
+# 6 バイアスありデータのt検定 ---------------------------------------------------------
 
 # t検定を行う
 # --- treatmentが1/0のspendをベクトルで取得
@@ -169,5 +185,5 @@ rct_ttest_biased <- t.test(mens_mail_biased, no_mail_biased, var.equal = T)
 
 
 # 確認
-# --- p値がさらに小さくなっている（セレクションバイアス）
-rct_ttest_biased %>% print()
+# --- p値がさらに小さくなっている（セレクションバイアスの影響）
+rct_ttest_biased %>% print()1
