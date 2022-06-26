@@ -8,8 +8,18 @@
 
 
 # ＜概要＞
-# - 因果推論においては欠損値データの処理も重要な過大となる
+# - 因果推論においては欠損値データの処理も重要な課題となる
 # - 多重代入法は多くの分野で欠損データの対処方法のベストプラクティスとして用いられている
+
+
+# ＜欠測のメカニズム＞
+# - MCAR：Xの値が何にも依存せず完全に無作為で欠損すること
+# - MAR ：Xの値に依存して欠損するものの、γを条件づけたときに無作為な欠損とみなせること
+# - NMAR：Xの値に依存して欠損し、かつγを条件づけたときに無作為な欠損とみなせないこと
+
+# ＜欠測処理の方法＞
+# - MCARの場合は欠測している行を削除(リストワイズ除去法)しても偏りが生じないが、MARの場合は偏りが生じる
+# - MARの条件が満たされれば、欠測メカニズムを無視可能とみなすことができる
 
 
 # ＜目次＞
@@ -29,6 +39,7 @@ library(magrittr)
 library(Amelia)
 library(mice)
 
+
 # データロード
 data19a <- read_csv("csv/data19a.csv", na = "9999")
 data19b <- read_csv("csv/data19b.csv")
@@ -37,7 +48,9 @@ data19b <- read_csv("csv/data19b.csv")
 # 1 単一代入法 ---------------------------------------------------------------
 
 # ＜ポイント＞
-# -
+# - 単一代入法は逆回帰を利用して欠損値を推定する手法
+#   --- 逆回帰としてモデルを考えた場合は欠測値があっても回帰係数を正しく推定することができる
+#   --- 欠損以外のデータでモデル構築して予測値を用いて欠損値を補完
 
 # ＜データ概要＞
 # - y  ： 被説明変数
@@ -47,16 +60,42 @@ data19b <- read_csv("csv/data19b.csv")
 
 
 # データ確認
+# --- NAの真値は80
+# --- NAの推定値は74.1
 data19a %>% print()
 
 # モデル構築
-# --- 欠損値の与える影響を確認
-# --- 真値は0.8607, 欠損の場合は0.6903
-lm(x1 ~ y, data = data19a)
-lm(x2 ~ y, data = data19a)
+# --- 逆回帰モデルを構築
+model1 <- lm(x1 ~ y, data = data19a)
+model2 <- lm(x2 ~ y, data = data19a)
+model3 <- lm(x3 ~ y, data = data19a)
+
+# 確認
+# --- 真値は0.8607
+# --- 欠損の場合は0.6903
+# --- 欠損値補完ほ場合は0.6901（）
+print(model1)
+print(model2)
+print(model3)
+
+# NAの推定
+model3$fitted.values[1]
+
+# 代入法における誤差
+# --- 根本的な誤差
+# --- 推定誤差
+data19a$x1[1] - model1$fitted.values[1]
+model1$fitted.values[1] - model3$fitted.values[1]
 
 
 # 2 多重代入法 -------------------------------------------------------------
+
+# ＜ポイント＞
+# - 多重代入法は推定するたびに異なる回帰モデルを推定する方法
+#   --- 以降ではEMBアルゴリズムを使用（ブートストラップ法に期待値最大化法を適用）
+#   --- シミュレーションにより推定不確実性を反映
+#   --- 各データでモデルを構築してから推定結果を統合する点に注意
+
 
 # データ作成
 # --- 単一代入法を用いた説明変数を使用
@@ -67,11 +106,13 @@ set.seed(1)
 a.out <- df2 %>% amelia(m = 3)
 
 # 欠損値補完後のデータ
+# --- シミュレーションベースで単一代入法を実行
 dfimp1 <- a.out$imputation[[1]]
 dfimp2 <- a.out$imputation[[2]]
 dfimp3 <- a.out$imputation[[3]]
 
 # モデル構築
+# --- 各データでモデルを構築してから推定結果を統合する
 model1 <- lm(y ~ x2, data = dfimp1)
 model2 <- lm(y ~ x2, data = dfimp2)
 model3 <- lm(y ~ x2, data = dfimp3)
@@ -84,6 +125,12 @@ model3 %>% summary() %>% use_series(coefficient)
 
 
 # 3 多重代入法の結果の統合方法 -----------------------------------------------
+
+# ＜ポイント＞
+# - 多重代入法の結果はモデル推定後の結果を用いて行う
+#   --- 回帰係数は平均値
+#   --- 標準誤差は二乗平均
+
 
 # 回帰係数の取得
 b1 <- model1 %>% summary() %>% use_series(coefficient) %>% .[2, 1]
@@ -98,19 +145,21 @@ se3 <- model3 %>% summary() %>% use_series(coefficient) %>% .[2, 2]
 # 回帰係数の平均値
 betabar <- (b1 + b2 + b3) / 3
 
-# 標準誤差の平均値
+# 代入内分散
 wbar <- (se1^2 + se2^2 + se3^2) / 3
 
+# 介入間分散
+bbar <- ((b1 - betabar)^2 + (b2 - betabar)^2 + (b3 - betabar)^2) / (3 - 1)
 
-bbar1 <- (b1 - betabar)^2 + (b2 - betabar)^2 + (b3 - betabar)^2
-bbar2 <- bbar1 / (3 - 1)
-
-tbar <- wbar + (1 + 1/3) * bbar2
+tbar <- wbar + (1 + 1/3) * bbar
 betabar
 sqrt(tbar)
 
 
 # 4 {mice}による多重代入法 -------------------------------------------------
+
+# データ確認
+df2 %>% print()
 
 # パラメータ設定
 m1 <- 3
@@ -123,7 +172,9 @@ dfimp0 <- NULL
 b0 <- NULL
 se0 <- NULL
 
-# 回帰係数等の取得
+# 推定結果の取得
+# --- シミュレーションごとの回帰係数と標準誤差の取得
+i <- 1
 for (i in 1:m1){
   dfimp0 <- a.out$imputations[[i]]
   model0 <- lm(y ~ x2, data = dfimp0)
@@ -134,52 +185,22 @@ for (i in 1:m1){
 # 回帰係数の平均値
 b0 %>% mean()
 
+# 代入内分散
 wbar0 <- sum(se0^2) / m1
+
+# 代入間分散
 bbar0 <- sum((b0 - mean(b0))^2) / (m1 - 1)
+
+# 全体分散
 tbar0 <- wbar0 + (1 + 1 / m1) * bbar0
 tbar0 %>% sqrt()
 
 
 # 5 交互作用項のある重回帰モデルにおける欠損値処理 ------------------------------
 
-dfimp0 <- NULL
-b0 <- NULL
-se0 <- NULL
-m1 <- 3
-
-m.out <- mice(df2, m = m1, seed = 1, meth = "norm", maxit = 20)
-for (i in 1:m1){
-  dfimp0 <- complete(m.out, i)
-  model0 <- lm(y ~ x2, data = dfimp0)
-  b0[i] <- model0 %>% summary() %>% use_series(coefficient) %>% .[2, 1]
-  se0[i] <- model0 %>% summary() %>% use_series(coefficient) %>% .[2, 2]
-}
-
-mean(b0)
-wbar0 <- sum(se0^2) / m1
-bbar0 <- sum((b0 - mean(b0))^2) / (m1 - 1)
-tbar0 <- wbar0 + (1 + 1 / m1) * bbar0
-sqrt(tbar0)
-
-
-# 例示
-set.seed(1)
-n1 <- 10
-x1 <- rnorm(n1) %>% round(0)
-x2 <- rnorm(n1) %>% round(0)
-e1 <- rnorm(n1)
-
-x1x2 <- x1 * x2
-
-y <- round(1 + 1 * x1 + 1 * x2 + 1 * x1x2 + e1, 0)
-df1 <- data.frame(y, x1, x2, x1x2)
-x2[1] <- NA
-x1x2[1] <- NA
-df2 <- data.frame(y, x1, x2, x1x2)
-
-
-df1
-df2
+# データロード
+df1 <- read_csv("csv/data19_df1.csv")
+df2 <- read_csv("csv/data19_df2.csv")
 
 
 imp1 <- mice(data = df2, m = 1, seed = 1, maxit = 1, meth = c("", "", "norm.predict", "norm.predict"))
@@ -258,4 +279,3 @@ tau2a %>% mean()
 w1bar <- sum(se2a^2) / m1
 b1bar <- sum((tau2a - mean(tau2a))^2) / (m1 - 1)
 sqrt(w1bar + (1 + 1 / m1) * b1bar)
-
