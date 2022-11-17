@@ -28,6 +28,7 @@
 
 # ライブラリ
 library(tidyverse)
+library(psych)
 
 
 # データロード
@@ -59,6 +60,8 @@ male_df <-
     mutate(treatment = ifelse(segment == "Mens E-Mail", 1, 0))
 
 # 確認
+# --- 1：男性にメール配信
+# --- 0：メール配信なし
 male_df$treatment %>% table()
 
 
@@ -103,18 +106,33 @@ t1 - t0
 #   --- RCTで統計的に統計的に有意な差があることを確認
 
 
-# 有意差検定(t検定)
+# ベクトルの作成
 # --- treatmentが1/0のspendをベクトルで取得
-# --- 上記の平均差に対して検定を行う
-# --- var.equal引数をTRUEとすることで等分散性を仮定している
 mens_mail <- male_df %>% filter(treatment == 1) %>% pull(spend)
 no_mail   <- male_df %>% filter(treatment == 0) %>% pull(spend)
+
+# 統計量の確認
+# --- 平均値に差があることを確認
+mens_mail %>% describe()
+no_mail %>% describe()
+
+# 平均値の差
+# --- 0.76の差がある
+# --- この差はサンプルの分布状況から見て有意な差といえるのか？
+mean(mens_mail) - mean(no_mail)
+
+# 有意差検定(t検定)
+# --- 上記の平均差に対して検定を行う
+# --- var.equal引数をTRUEとすることで等分散性を仮定している
 rct_ttest <- t.test(mens_mail, no_mail, var.equal = TRUE)
 
 # 確認
 # --- ｢mean of x｣｢mean of y ｣は前述の集計結果と同じ
 # --- p値が0に極めて近くt値も5.3（差がゼロであることを否定する結果：統計的に有意）
 rct_ttest %>% print()
+
+# p値
+rct_ttest$p.value
 
 
 # 4 バイアスありのデータ作成 -------------------------------------------------------------
@@ -193,3 +211,4 @@ rct_ttest_biased <- t.test(mens_mail_biased, no_mail_biased, var.equal = T)
 # 確認
 # --- p値がさらに小さくなっている（セレクションバイアスの影響）
 rct_ttest_biased %>% print()
+rct_ttest_biased$p.value %>% print()
