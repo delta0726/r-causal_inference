@@ -2,7 +2,7 @@
 # Title     : 効果検証入門
 # Chapter   : 2章 介入効果を測るための回帰分析
 # Theme     : 2-2 回帰分析におけるバイアス
-# Date      : 2022/06/21
+# Date      : 2022/11/19
 # Page      : P49 - P66
 # URL       : https://github.com/ghmagazine/cibook
 #***************************************************************************************
@@ -31,19 +31,26 @@
 # ライブラリ
 library(tidyverse)
 library(broom)
+library(psych)
 
 
 # データロード
 # --- E-mailのバイアスありデータ（1-4で作成）
-email_data <- read_csv("csv/E-MailAnalytics.csv")
+biased_data <- read_csv("csv/E-MailAnalytics_bias.csv")
 male_df <- read_csv("csv/E-MailAnalytics_male.csv")
 
-# データ概要
-email_data %>% as_tibble()
-email_data %>% glimpse()
+# データ加工
+# --- 使用データのみに限定
+biased_data <- biased_data %>% select(spend, treatment, channel, recency, history, visit)
+male_df <- male_df %>% select(spend, treatment, channel, recency, history, visit)
 
+# データ確認
+biased_data %>% as_tibble()
 male_df %>% as_tibble()
-male_df %>% glimpse()
+
+# プロット作成
+biased_data %>% pairs.panels()
+
 
 
 # 1 回帰分析におけるバイアス --------------------------------------------------------------
@@ -51,23 +58,24 @@ male_df %>% glimpse()
 # ＜ポイント＞
 # - 回帰分析でセレクションバイアスが小さくなるような推定を行うには共変量を正しく選択する必要がある
 #   --- バイアスを及ぼす共変量をモデルに加えることでバイアスを緩和することができる
-#   --- 共変量による重回帰によりRCTに近づけることができる（完全ではない）
+#   --- 重回帰分析で共変量がコントロール変数の役割を持つことによる効果
+#   --- 共変量の追加によりRCTに近づけることができる（共変量の選択に依存するため完全ではない）
 
 
 # 回帰分析の比較
 # --- RCTデータ
-# --- バイアスのあるデータ
+# --- バイアスデータ
 rct_reg_coef <- lm(spend ~ treatment, data = male_df) %>% tidy()
 nonrct_reg_coef <- lm(spend ~ treatment, data = biased_data) %>% tidy()
 
 # 確認
 # --- RCTデータ： 0.770（真値：1-4で測定した値と同じ）
-# --- バイアスのあるデータ： 0.979（セレクションバイアスで効果が過剰に推定）
+# --- バイアスデータ： 0.979（セレクションバイアスで効果が過剰に推定）
 rct_reg_coef %>% print()
 nonrct_reg_coef %>% print()
 
 # 回帰係数の追加
-# --- バイアスのあるデータに共変量を追加して推定
+# --- バイアスデータに共変量を追加して推定
 # --- 回帰係数は0.847（真値に近づいた）
 nonrct_mreg_coef <- lm(spend ~ treatment + recency + channel + history, data = biased_data) %>% tidy()
 nonrct_mreg_coef %>% print()
@@ -159,6 +167,7 @@ beta_2 * gamma_1
 
 
 # モデル式の定義
+# --- 3パターンのモデル
 # --- ベクトルで用意
 formula_vec <-
   c(spend ~ treatment + recency + channel,
@@ -214,7 +223,6 @@ coef_gap %>% print()
 # ＜ポイント＞
 # - セレクションバイアスが減る可能性から、OVBがゼロでない変数は全てモデルに入れてよいわけではない
 #   --- Post Treatment Bias
-
 
 # ＜Post Treatment Bias＞
 # - これを避けるには、介入よりも後のタイミングで値が決まるような変数は使ってはいけない
