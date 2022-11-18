@@ -2,20 +2,25 @@
 # Title     : 効果検証入門
 # Chapter   : 3章 傾向スコアを用いた分析
 # Theme     : 3-2 傾向スコアを利用した効果の推定
-# Date      : 2022/06/20
+# Date      : 2022/11/19
 # Page      : P96 - P111
 # URL       : https://github.com/ghmagazine/cibook
 #***************************************************************************************
 
 
 # ＜概要＞
-# - 回帰分析(共分散分析)は共変量の選定が重要なるものの、回帰分析の仮定を考えると非常に難しいプロセス
 # - 傾向スコアマッチングは傾向スコアを用いて介入有無のグループの性質が近くなるようサンプリングする
+#   --- 傾向スコアとは、各サンプルにおいて介入が行われる確率
+
+
+# ＜回帰分析の課題＞
+# - 回帰分析(共分散分析)は共変量の選定が重要だが、変数選択は非常に難しいプロセス
+#   --- 分析者の主観や構造変化などがあり、一意に定めることが難しい
 
 
 # ＜目次＞
 # 0 準備
-# 1 バイアスのあるデータを作成
+# 1 データ加工
 # 2 傾向スコアの推定
 # 3 傾向スコアマッチング
 # 4 逆確率重み付き推定（IPW）
@@ -40,44 +45,22 @@ conflict_prefer("select", "dplyr", quiet = TRUE)
 conflict_prefer("filter", "dplyr", quiet = TRUE)
 
 
-# データ取り込み
-email_data <- read_csv("csv/E-MailAnalytics.csv")
+# データロード
+# --- E-mailのバイアスありデータ（1-4で作成）
+biased_data <- read_csv("csv/E-MailAnalytics_bias.csv")
+male_df <- read_csv("csv/E-MailAnalytics_male.csv")
+
+
+# 1 データ加工 --------------------------------------------------------------
+
+# データ加工
+# --- 使用データのみに限定
+biased_data <- biased_data %>% select(spend, treatment, channel, recency, history, visit)
+male_df <- male_df %>% select(spend, treatment, channel, recency, history, visit)
 
 # データ確認
-email_data %>% print()
-email_data %>% glimpse()
-
-
-# 1 バイアスのあるデータを作成 -----------------------------------------------------------
-
-# データ作成
-# --- 女性向けメールが配信されたデータを削除
-# --- 介入を表すtreatment変数を追加
-male_df <-
-  email_data %>%
-    filter(segment != "Womens E-Mail") %>%
-    mutate(treatment = ifelse(segment == "Mens E-Mail", 1, 0))
-
-# シード固定
-set.seed(1)
-
-# パラメータ指定
-# --- 条件に反応するサンプルの量を半分にする
-obs_rate_c <- 0.5
-obs_rate_t <- 0.5
-
-# バイアスのあるデータを作成
-biased_data <-
-  male_df %>%
-    mutate(obs_rate_c = ifelse((history > 300) |
-                                 (recency < 6) |
-                                 (channel == "Multichannel"), obs_rate_c, 1),
-           obs_rate_t = ifelse((history > 300) |
-                                 (recency < 6) |
-                                 (channel == "Multichannel"), 1, obs_rate_t),
-           random_number = runif(n = NROW(male_df))) %>%
-    filter((treatment == 0 & random_number < obs_rate_c) |
-             (treatment == 1 & random_number < obs_rate_t))
+biased_data %>% as_tibble()
+male_df %>% as_tibble()
 
 
 # 2 傾向スコアの推定 -------------------------------------------------------------------
