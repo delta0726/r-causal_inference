@@ -2,7 +2,7 @@
 # Title     : 効果検証入門
 # Chapter   : 3章 傾向スコアを用いた分析
 # Theme     : 3-3 機械学習を利用したメールマーケティング施策の効果測定
-# Date      : 2022/06/20
+# Date      : 2022/11/19
 # Page      : P96 - P111
 # URL       : https://github.com/ghmagazine/cibook
 #***************************************************************************************
@@ -30,7 +30,6 @@
 library(tidyverse)
 library(magrittr)
 library(broom)
-# library(MatchIt)
 library(WeightIt)
 library(cobalt)
 library(Matching)
@@ -78,16 +77,9 @@ train_flag <-
 
 # データ分割
 # --- 訓練データ
-male_df_train <-
-  male_df %>%
-    slice(train_flag) %>%
-    filter(treatment == 0)
-
-# データ分割
 # --- 検証データ
-male_df_test <-
-  male_df %>%
-    slice(-train_flag)
+male_df_train <- male_df %>% slice(train_flag) %>% filter(treatment == 0)
+male_df_test <- male_df %>% slice(-train_flag)
 
 
 # 3 傾向スコアの算出してデータセットに追加 ---------------------------------------------
@@ -140,25 +132,21 @@ ml_male_df <-
 
 
 # 平均の差を確認
-# --- 実験をしていた場合
-rct_male_lm <-
-  lm(spend ~ treatment, data = male_df_test) %>%
-    tidy()
-
-# 平均の比較
-# --- セレクションバイアスの影響あり
-ml_male_lm <-
-  lm(spend ~ treatment, data = ml_male_df) %>%
-    tidy()
+rct_male_lm <- lm(spend ~ treatment, data = male_df_test) %>% tidy()
+ml_male_lm <- lm(spend ~ treatment, data = ml_male_df) %>% tidy()
 
 # 確認
-# --- 0.764
-# --- 1.08
+# --- RCTの場合：0.805
+# --- セレクションバイアスあり：1.04（メールが売上の高い顧客に偏って配信された結果）
 rct_male_lm %>% print()
 ml_male_lm %>% print()
 
 
 # 5 傾向スコアマッチングによる推定 -------------------------------------------------
+
+# ＜ポイント＞
+# - ここでは{Matching}のMatch()を使う
+
 
 # モデル構築
 PSM_result <-
@@ -174,6 +162,7 @@ PSM_result %>% summary() %>% use_series(coefficient)
 # 6 逆確率ウエイトによる推定 ------------------------------------------------------
 
 # IPWの推定
+# --- 0.7015（p値が0.42もあり信頼性も疑わしい）
 W.out <-
   weightit(treatment ~ recency + history_segment + channel + zip_code,
            data = ml_male_df,
