@@ -68,15 +68,16 @@ male_df %>% as_tibble()
 # ＜ポイント＞
 # - 傾向スコアは分類モデルのクラス確率として定義される
 #   --- 共変量が多い場合に1つの系列として情報が縮約される
-#   --- 最もベーシックなのは一般化線形モデルだが、クラス確率が定義されれば他のアルゴリズムでもよい
+#   --- 最もベーシックなのは一般化線形モデル（クラス確率が定義されれば他のアルゴリズムでも良い）
+#   --- 機械学習アルゴリズムだと変数選択の機能も持つ
 
 
-# データ確認
-biased_data %>%
-  select(treatment, recency, history, channel)
+# 介入変数
+biased_data$treatment %>% table()
 
 # モデル構築
-# --- 一般化線形モデルの傾向スコアの推定
+# --- 介入変数に対する分類モデルのクラス確率を算出
+# --- 一般化線形モデルのクラス確率を傾向スコアとする
 ps_model <-
   glm(treatment ~ recency + history + channel,
       data = biased_data, family = binomial)
@@ -93,29 +94,38 @@ ps_model$fitted.values %>% head()
 
 
 # データ確認
-biased_data %>%
-  select(treatment, recency, history, channel)
+# --- サンプル数：31863
+biased_data %>% nrow()
 
-# 傾向スコアマッチング
+# モデル構築
+# --- 傾向スコアマッチング
 m_near <-
-  matchit(treatment ~ recency + history + channel,
-          data = biased_data, method = "nearest", replace = TRUE)
+  matchit(treatment ~ recency + history + channel, data = biased_data,
+          method = "nearest", distance = "glm", replace = TRUE)
+
+# マッチングデータの作成
+# --- 31863 ⇒ 24222
+matched_data <- m_near %>% match.data()
+matched_data %>% nrow()
 
 # プロット作成
 # --- 共変量のバランスを確認
 m_near %>% love.plot(threshold = .1)
 
-# マッチングデータの作成
-# --- 31853 ⇒ 24222
-matched_data <- m_near %>% match.data()
+# データ比較
+# --- matched_dataは2群の平均値が近くなっている（love.plotの結果と整合的）
+biased_data %>% group_by(treatment) %>% summarise_if(is.numeric, mean)
+matched_data %>% group_by(treatment) %>% summarise_if(is.numeric, mean)
 
-# マッチング後のデータで効果の推定
+# 効果測定
+# --- マッチング後のデータで検証
 PSM_result <-
   lm(spend ~ treatment, data = matched_data) %>%
     tidy()
 
 # 確認
-# --- ATT：0.908
+# --- ATT：0.908（真値：0.770）
+# --- 近い値だが、少し乖離が気になるレベルか
 PSM_result %>% print()
 
 
@@ -123,31 +133,29 @@ PSM_result %>% print()
 
 # ＜ポイント＞
 # - 逆確率重み付き推定とは、傾向スコアの逆数をサンプルのウエイトとして利用する方法
+#   --- データのサンプリングは行われない
+#   --- Matchitと比べると高速に動作する
 
-
-# データ確認
-biased_data %>%
-  select(treatment, recency, history, channel)
 
 # 重みの推定
 weighting <-
-  weightit(treatment ~ recency + history + channel,
-           data = biased_data,
-           method = "ps",
-           estimand = "ATE")
+  weightit(treatment ~ recency + history + channel, data = biased_data,
+           method = "ps", estimand = "ATE")
 
 # プロット作成
 # --- 重み付きデータでの共変量のバランス
 weighting %>% love.plot(threshold = .1)
 
-# 重み付きデータでの効果の推定
+# 効果測定
+# --- データセットは元のもの
+# --- 回帰ウエイトに取得したウエイトを設定
 IPW_result <-
-  lm(spend ~ treatment,
-     data = biased_data, weights = weighting$weights) %>%
+  lm(spend ~ treatment, data = biased_data, weights = weighting$weights) %>%
     tidy()
 
 # 確認
-# --- ATT：0.870
+# --- ATT：0.870（真値：0.770）
+# --- 近い値だが、少し乖離が気になるレベルか
 IPW_result %>% print()
 
 
@@ -156,26 +164,32 @@ IPW_result %>% print()
 # ＜ポイント＞
 # - 傾向スコアではデータに対する説明力が一定水準を超えることが重要とされてきた(c統計量)
 # - 近年では傾向スコアを用いたマッチング後のデータで共変量のバランスが取れているかを重視（love.plot）
-#   --- replace = TRUEにしないとマッチングの度合いが下がる
+#   --- replace = TRUE(復元抽出)にしないとマッチングの度合いが下がる
 
 
 # 傾向スコアマッチング（再掲）
 # --- replace = TRUE
 m_near_true <-
-  matchit(treatment ~ recency + history + channel,
-          data = biased_data, method = "nearest", replace = TRUE)
+  matchit(treatment ~ recency + history + channel, data = biased_data,
+          method = "nearest", replace = TRUE)
 
 # 傾向スコアマッチング（再掲）
 # --- replace = FALSE
 m_near_false <-
-  matchit(treatment ~ recency + history + channel,
-          data = biased_data, method = "nearest", replace = FALSE)
+  matchit(treatment ~ recency + history + channel, data = biased_data,
+          method = "nearest", replace = FALSE)
 
 # プロット作成
 # --- replaceを適用しないとAdjustの方が乖離が大きくなる
 p1 <- m_near_true %>% love.plot(threshold = .1)
 p2 <- m_near_false %>% love.plot(threshold = .1)
 grid.arrange(p1, p2, nrow = 2)
+
+# 回帰係数の比較
+# --- 0.908
+# --- 1.07
+reslt_true <- lm(spend ~ treatment, data = match.data(m_near_true)) %>% tidy()
+reslt_false <- lm(spend ~ treatment, data = match.data(m_near_false)) %>% tidy()
 
 
 # 6 回帰分析(共分散分析)と傾向スコアの比較 -----------------------------------------------------
@@ -191,8 +205,8 @@ grid.arrange(p1, p2, nrow = 2)
 
 # ＜傾向スコア＞
 # メリット
-# - Yに対するモデリングを必要としない
-#   --- 情報を入手しやすいZ(共変量)に対するモデリングだけでよい
+# - Y(Spend)に対するモデリングを必要としない
+#   --- 情報を入手しやすいZ(介入変数)に対するモデリングだけでよい（どのサンプルに介入したかは基準があることが多い）
 #   --- Yに対して正確な情報を持ち合わせない場合に重宝する（実務ではこのケースが大多数）
 
 # デメリット
