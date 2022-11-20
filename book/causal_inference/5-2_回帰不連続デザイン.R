@@ -34,6 +34,11 @@ rdd_data <- read_csv("csv/rdd_data.csv")
 
 # 1 データ確認 -------------------------------------------------------------------
 
+# ＜ポイント＞
+# - RCTデータはVisitに依存するものの、介入基準は明確ではない
+# - RDDデータは介入基準が明確にhistoryの水準によって決められている
+
+
 # プロット作成
 # --- RCTデータ
 p1 <-
@@ -92,11 +97,17 @@ rdd_data_table <-
   rdd_data %>%
     group_by(treatment) %>%
     summarise(count = n(),
-              visit_rate = mean(visit))
+              visit = mean(visit))
 
 # データ確認
 rct_data_table %>% print()
 rdd_data_table %>% print()
+
+# 来訪率の差
+# --- rct：0.08  rdd：0.13
+# --- 想定どおりRDDの方が高い
+round(rct_data_table$visit[2] - rct_data_table$visit[1], 2)
+round(rdd_data_table$visit[2] - rdd_data_table$visit[1], 2)
 
 
 # 3 線形回帰モデルによる分析 -----------------------------------------------------
@@ -113,23 +124,35 @@ rdd_lm_reg <-
     filter(term == "treatment")
 
 # 結果確認
+# --- 0.114
 rdd_lm_reg %>% print()
 
 
 # 4 非線形回帰モデルによる分析 -----------------------------------------------------
 
+# ＜ポイント＞
+# - {rddtools}を使って非線形回帰を利用したRDDを簡単に行うことができる
+
+
 # モデルデータ作成
+# --- cutpoint引数にカットオフの値を入力する
 nonlinear_rdd_data <-
   rdd_data %$%
     rdd_data(y = visit,
              x = history_log,
              cutpoint = 5.5)
 
+# データ確認
+nonlinear_rdd_data %>% class()
+nonlinear_rdd_data %>% glimpse()
+
 # モデル構築
+# --- order引数でべき乗の値を指定する
 nonlinear_rdd_ord4 <- rdd_reg_lm(rdd_object = nonlinear_rdd_data, order = 4)
 
 # 結果確認
 nonlinear_rdd_ord4 %>% print()
+nonlinear_rdd_ord4$coefficients['D']
 
 # プロット作成
 nonlinear_rdd_ord4 %>% plot()
