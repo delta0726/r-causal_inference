@@ -67,7 +67,8 @@ lsv <-
 JS_df <-
   sv %>%
     bind_rows(lsv) %>%
-    mutate(LSV =if_else(company == "Lambeth & Southwark and Vauxhall", 1, 0))
+    mutate(LSV =if_else(company == "Lambeth & Southwark and Vauxhall", 1, 0)) %>%
+    select(company, LSV, area, year, death)
 
 
 # 2 データ保存 ----------------------------------------------------------------
