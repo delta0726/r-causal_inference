@@ -1,8 +1,9 @@
 #***************************************************************************************
 # Title     : 効果検証入門
 # Chapter   : 4章 差分の差分法(DID)とCausal Impact
-# Date      : 2020/8/13
-# Page      : P - P
+# Theme     : 4-1 コレラデータの作成
+# Date      : 2022/11/19
+# Page      : P137 - P147
 # URL       : https://github.com/ghmagazine/cibook
 #***************************************************************************************
 
@@ -46,8 +47,8 @@ lsv_death <- c(lsv1849, lsv1854)
 
 # ラベル作成（地域）
 # --- どのデータがどのエリアのものか
-sv_area <- str_c("sv_", c(1:length(sv1849), 1:length(sv1854)))
-lsv_area <- str_c("lsv_", c(1:length(lsv1849), 1:length(lsv1854)))
+sv_area <- str_c("sv_", c(seq_along(sv1849), seq_along(sv1854)))
+lsv_area <- str_c("lsv_", c(seq_along(lsv1849), seq_along(lsv1854)))
 
 
 # ラベル作成（時点）
@@ -82,7 +83,8 @@ JS_df <-
 JS_sum <-
   JS_df %>%
     group_by(company, LSV, year) %>%
-    summarise(death = sum(death), .groups = "drop")
+    summarise(death = sum(death), .groups = "drop") %>%
+    ungroup()
 
 
 # 2 テーブルによるDIDの集計分析 -----------------------------------------------
