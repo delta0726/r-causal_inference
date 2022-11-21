@@ -25,7 +25,7 @@
 # ＜目次＞
 # 0 準備
 # 1 単一代入法
-# 2 多重代入法
+# 2 多重代入法による欠損値シミュレーション
 # 3 多重代入法の結果の統合方法
 # 4 {mice}による多重代入法
 # 5 交互作用項のある重回帰モデルにおける欠損値処理
@@ -41,14 +41,14 @@ library(mice)
 
 
 # データロード
-data19a <- read_csv("csv/data19a.csv", na = "9999")
+df1 <- read_csv("csv/data19a.csv", na = "9999")
 data19b <- read_csv("csv/data19b.csv")
 
 
 # 1 単一代入法 ---------------------------------------------------------------
 
 # ＜ポイント＞
-# - 単一代入法は逆回帰を利用して欠損値を推定する手法
+# - 単一代入法は逆回帰モデルを利用して欠損値を推定する手法
 #   --- 逆回帰としてモデルを考えた場合は欠測値があっても回帰係数を正しく推定することができる
 #   --- 欠損以外のデータでモデル構築して予測値を用いて欠損値を補完
 
@@ -60,20 +60,20 @@ data19b <- read_csv("csv/data19b.csv")
 
 
 # データ確認
-# --- NAの真値は80
-# --- NAの推定値は74.1
-data19a %>% print()
+# --- NAの真値：80
+# --- NAの推定値：74.1（x3は推定値で補完した系列）
+df1 %>% print()
 
 # モデル構築
-# --- 逆回帰モデルを構築
-model1 <- lm(x1 ~ y, data = data19a)
-model2 <- lm(x2 ~ y, data = data19a)
-model3 <- lm(x3 ~ y, data = data19a)
+# --- 逆回帰モデルを構築（xとyが逆である点に注意）
+model1 <- lm(x1 ~ y, data = df1)
+model2 <- lm(x2 ~ y, data = df1)
+model3 <- lm(x3 ~ y, data = df1)
 
 # 確認
-# --- 真値は0.8607
-# --- 欠損の場合は0.6903
-# --- 欠損値補完ほ場合は0.6901（）
+# --- 真値：0.8607
+# --- 欠損の場合：0.6903
+# --- 欠損値補完の場合：0.6901
 print(model1)
 print(model2)
 print(model3)
@@ -82,13 +82,13 @@ print(model3)
 model3$fitted.values[1]
 
 # 代入法における誤差
-# --- 根本的な誤差
-# --- 推定誤差
-data19a$x1[1] - model1$fitted.values[1]
+# --- 根本的な誤差（実測値 - 推定値[モデル1]）
+# --- 推定誤差（推定値[モデル1] - 推定値[モデル3]）
+df1$x1[1] - model1$fitted.values[1]
 model1$fitted.values[1] - model3$fitted.values[1]
 
 
-# 2 多重代入法 -------------------------------------------------------------
+# 2 多重代入法による欠損値シミュレーション -----------------------------------
 
 # ＜ポイント＞
 # - 多重代入法は推定するたびに異なる回帰モデルを推定する方法
@@ -99,11 +99,16 @@ model1$fitted.values[1] - model3$fitted.values[1]
 
 # データ作成
 # --- 単一代入法を用いた説明変数を使用
-df2 <- data.frame(y = data19a$y, x2 = data19a$x2)
+df2 <- df1 %>% select(y, x2)
 
 # 多重代入法
 set.seed(1)
 a.out <- df2 %>% amelia(m = 3)
+
+# 出力確認
+a.out %>% print()
+a.out %>% names()
+a.out %>% plot()
 
 # 欠損値補完後のデータ
 # --- シミュレーションベースで単一代入法を実行
@@ -119,12 +124,12 @@ model3 <- lm(y ~ x2, data = dfimp3)
 
 # 結果確認
 # --- いずれも真値の0.8607に近い
-model1 %>% summary() %>% use_series(coefficient)
-model2 %>% summary() %>% use_series(coefficient)
-model3 %>% summary() %>% use_series(coefficient)
+model1 %>% summary() %>% use_series(coefficient) %>% .[2, 1]
+model2 %>% summary() %>% use_series(coefficient) %>% .[2, 1]
+model3 %>% summary() %>% use_series(coefficient) %>% .[2, 1]
 
 
-# 3 多重代入法の結果の統合方法 -----------------------------------------------
+# 3 多重代入法の回帰係数の統合方法 -------------------------------------------
 
 # ＜ポイント＞
 # - 多重代入法の結果はモデル推定後の結果を用いて行う
@@ -143,20 +148,31 @@ se2 <- model2 %>% summary() %>% use_series(coefficient) %>% .[2, 2]
 se3 <- model3 %>% summary() %>% use_series(coefficient) %>% .[2, 2]
 
 # 回帰係数の平均値
+# --- 式(19.4)
+# --- 0.846083
 betabar <- (b1 + b2 + b3) / 3
+print(betabar)
 
 # 代入内分散
+# --- 式(19.5)
 wbar <- (se1^2 + se2^2 + se3^2) / 3
 
 # 介入間分散
+# --- 式(19.6)
 bbar <- ((b1 - betabar)^2 + (b2 - betabar)^2 + (b3 - betabar)^2) / (3 - 1)
 
+# 全体分散
+# --- 式(19.7)
+# --- 0.2591214
 tbar <- wbar + (1 + 1/3) * bbar
-betabar
 sqrt(tbar)
 
 
 # 4 {mice}による多重代入法 -------------------------------------------------
+
+# ＜ポイント＞
+# - {mice}による計算で前述の全体分散を再現する
+
 
 # データ確認
 df2 %>% print()
@@ -183,6 +199,7 @@ for (i in 1:m1){
 }
 
 # 回帰係数の平均値
+# --- 0.846083
 b0 %>% mean()
 
 # 代入内分散
@@ -192,6 +209,7 @@ wbar0 <- sum(se0^2) / m1
 bbar0 <- sum((b0 - mean(b0))^2) / (m1 - 1)
 
 # 全体分散
+# --- 0.2591214
 tbar0 <- wbar0 + (1 + 1 / m1) * bbar0
 tbar0 %>% sqrt()
 
