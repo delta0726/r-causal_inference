@@ -26,6 +26,7 @@
 # ライブラリ
 library(tidyverse)
 library(magrittr)
+library(broom)
 
 
 # 1 数値例で理解する最小二乗法 -----------------------------------------------------
@@ -59,17 +60,15 @@ e1 %>% sum()
 e2 %>% sum()
 
 # 残差平方の合計
-e1b <- e1^2
-e2b <- e2^2
-e1b %>% sum()
-e2b %>% sum()
+e1^2 %>% sum()
+e2^2 %>% sum()
 
 
 # 2 最小二乗法による切片と傾きの公式 --------------------------------------------------
 
 # ＜ポイント＞
 # - 最小二乗法は解析的に係数を算出することができる
-#   --- 実務で使うことはないがプロセスは一度確認しておく
+#   --- 公式によるアプローチは実務で使うことはない（プロセスは一度確認しておく）
 
 
 # 標本データ
@@ -93,18 +92,19 @@ hensa_x2 <- hensa_x^2
 denom <- hensa_x2 %>% sum()
 
 # 公式による計算
-# --- 傾き
-# --- 切片
+# --- 傾き：6.857143
+# --- 切片：11.14286
 b1 <- num / denom
 b0 <- ybar - b1 * xbar
 
 # 関数による計算
 # --- 公式の計算と一致
 model <- lm(y1 ~ x1)
-model %>% summary() %>% use_series(coefficient)
+model %>% tidy()
 
 # 原点をとおる傾き
-b1b <- ybar / xbar
+# --- 10.90909
+ybar / xbar
 
 
 # 3 条件付き期待値としての回帰モデル --------------------------------------------------
@@ -162,16 +162,17 @@ model_3 <- lm(y3 ~ x3)
 # パラメータ取得
 # --- 切片
 # --- 傾き
-aOLS <- model_3 %>% summary() %>%use_series(coefficient) %>% .[1, 1]
-bOLS <- model_3 %>% summary() %>%use_series(coefficient) %>% .[2, 1]
+aOLS <- model_3 %>% tidy() %>% pull(estimate) %>% .[1]
+bOLS <- model_3 %>% tidy() %>% pull(estimate) %>% .[2]
 
 # 残差平方和
-ussOLS <- model_3 %>% resid() %>% .^2 %>% sum()
+ussOLS <- model_3 %>% resid() %>% raise_to_power(2) %>% sum()
 
 
 # モンテカルロシミュレーションによる残差平方和の算出
 # --- 切片はモデルからの取得値を使用
 # --- 傾きは一様乱数より生成（無情報分布）
+# --- 推定値から残差平方和(uss)を算出
 b1 <- NULL
 uss <- NULL
 set.seed(1)
@@ -191,6 +192,7 @@ ussOLS
 # プロット作成
 # --- シミュレーション結果から二次関数のプロット集合を取得
 # --- 最小値に縦線（2つはほぼ一致している）
+# --- 残差(uss)の最小値におけるb1が回帰係数となっている（6.857143）
 plot(b1, uss, col = 8, cex = 0.1, pch = 20)
-abline(v = bLOS, lty = 1)
+abline(v = bOLS, lty = 1)
 abline(h = ussOLS)
